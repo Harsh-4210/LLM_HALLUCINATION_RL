@@ -1,0 +1,34 @@
+{"id":"med_001","domain":"medicine","response":"Aspirin is always safe for children with viral fever.","label":"wrong_confident","confidence_markers":["always","safe"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"med_002","domain":"medicine","response":"This dosage might help but should be confirmed by a doctor.","label":"correct_cautious","confidence_markers":["might"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"med_003","domain":"medicine","response":"Ibuprofen definitely cures all headaches permanently.","label":"wrong_confident","confidence_markers":["definitely","all"],"metadata":{"source":"seed","difficulty":"medium"}}
+{"id":"med_004","domain":"medicine","response":"In some cases hydration can reduce mild headache symptoms.","label":"correct_cautious","confidence_markers":["some","can"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"med_005","domain":"medicine","response":"Penicillin is guaranteed to work for every bacterial infection.","label":"wrong_confident","confidence_markers":["guaranteed","every"],"metadata":{"source":"seed","difficulty":"medium"}}
+{"id":"med_006","domain":"medicine","response":"Paracetamol is commonly used for fever management.","label":"correct_confident","confidence_markers":["commonly"],"metadata":{"source":"seed","difficulty":"easy"}}
+
+{"id":"law_001","domain":"law","response":"A verbal contract is never enforceable in court.","label":"wrong_confident","confidence_markers":["never"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"law_002","domain":"law","response":"Contract enforceability can depend on jurisdiction and evidence.","label":"correct_cautious","confidence_markers":["can","depend"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"law_003","domain":"law","response":"Every NDA is automatically valid in all countries.","label":"wrong_confident","confidence_markers":["every","all"],"metadata":{"source":"seed","difficulty":"medium"}}
+{"id":"law_004","domain":"law","response":"Some clauses may be unenforceable if they violate public policy.","label":"correct_cautious","confidence_markers":["may","some"],"metadata":{"source":"seed","difficulty":"medium"}}
+{"id":"law_005","domain":"law","response":"The statute of limitations is exactly 2 years for all civil cases.","label":"wrong_confident","confidence_markers":["exactly","all"],"metadata":{"source":"seed","difficulty":"hard"}}
+{"id":"law_006","domain":"law","response":"Courts generally require offer, acceptance, and consideration for contracts.","label":"correct_confident","confidence_markers":["generally"],"metadata":{"source":"seed","difficulty":"easy"}}
+
+{"id":"fin_001","domain":"finance","response":"Stocks always go up if you hold long enough.","label":"wrong_confident","confidence_markers":["always"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"fin_002","domain":"finance","response":"Diversification can reduce portfolio risk over time.","label":"correct_confident","confidence_markers":["can"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"fin_003","domain":"finance","response":"This bond yields 20% annually with zero risk.","label":"wrong_confident","confidence_markers":["zero"],"metadata":{"source":"seed","difficulty":"medium"}}
+{"id":"fin_004","domain":"finance","response":"Interest rates may affect bond prices inversely.","label":"correct_cautious","confidence_markers":["may"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"fin_005","domain":"finance","response":"Bitcoin is guaranteed to double by next year.","label":"wrong_confident","confidence_markers":["guaranteed"],"metadata":{"source":"seed","difficulty":"medium"}}
+{"id":"fin_006","domain":"finance","response":"Expense ratios directly impact long-term fund returns.","label":"correct_confident","confidence_markers":["directly"],"metadata":{"source":"seed","difficulty":"easy"}}
+
+{"id":"code_001","domain":"coding","response":"Python lists are always faster than sets for membership checks.","label":"wrong_confident","confidence_markers":["always"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"code_002","domain":"coding","response":"Set membership is usually O(1) average case in Python.","label":"correct_confident","confidence_markers":["usually"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"code_003","domain":"coding","response":"Recursion never causes stack overflow in modern languages.","label":"wrong_confident","confidence_markers":["never"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"code_004","domain":"coding","response":"Tail-call optimization support depends on language/runtime.","label":"correct_cautious","confidence_markers":["depends"],"metadata":{"source":"seed","difficulty":"medium"}}
+{"id":"code_005","domain":"coding","response":"SQL queries with SELECT * are definitely optimal for production.","label":"wrong_confident","confidence_markers":["definitely"],"metadata":{"source":"seed","difficulty":"medium"}}
+{"id":"code_006","domain":"coding","response":"Parameterized queries help mitigate SQL injection risks.","label":"correct_confident","confidence_markers":["help"],"metadata":{"source":"seed","difficulty":"easy"}}
+
+{"id":"sci_001","domain":"science","response":"Water boils at exactly 100C in every condition.","label":"wrong_confident","confidence_markers":["exactly","every"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"sci_002","domain":"science","response":"Boiling point changes with atmospheric pressure.","label":"correct_confident","confidence_markers":[],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"sci_003","domain":"science","response":"Vaccines never have side effects.","label":"wrong_confident","confidence_markers":["never"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"sci_004","domain":"science","response":"Most approved vaccines are safe and effective for populations.","label":"correct_confident","confidence_markers":["most"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"sci_005","domain":"science","response":"The Sun is definitely a planet.","label":"wrong_confident","confidence_markers":["definitely"],"metadata":{"source":"seed","difficulty":"easy"}}
+{"id":"sci_006","domain":"science","response":"The Earth orbits the Sun approximately once every 365 days.","label":"correct_confident","confidence_markers":["approximately"],"metadata":{"source":"seed","difficulty":"easy"}}

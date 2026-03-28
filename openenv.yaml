@@ -1,0 +1,36 @@
+name: silent-failure-detector
+version: 0.1.0
+description: Deterministic OpenEnv-style environment for detecting confident wrong AI outputs.
+author: Harsh Jain
+entrypoint: src.app.main:app
+api:
+  reset: /reset
+  step: /step
+  state: /state
+  tasks: /tasks
+  baseline: /baseline
+  grader: /grader
+action_schema:
+  type: object
+  properties:
+    action:
+      type: integer
+      enum: [0, 1]
+  required: [action]
+observation_schema:
+  type: object
+  properties:
+    id:
+      type: string
+    text:
+      type: string
+    domain:
+      type: string
+    step_idx:
+      type: integer
+    confidence_marker_count:
+      type: integer
+    hedging_marker_count:
+      type: integer
+    number_density:
+      type: number

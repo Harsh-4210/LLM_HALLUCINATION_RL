@@ -1,0 +1,8 @@
+fastapi==0.116.1
+uvicorn==0.35.0
+pydantic==2.11.7
+streamlit==1.48.1
+pandas==2.3.2
+pytest==8.4.1
+openenv-core
+openai
