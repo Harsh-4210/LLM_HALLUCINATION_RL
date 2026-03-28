@@ -11,8 +11,7 @@ Supported back-ends (set via env-vars):
       API_BASE_URL=https://api.openai.com/v1
       MODEL_NAME=gpt-3.5-turbo
 
-If no API key is set, falls back to a feature-based heuristic agent
-that uses the observation's pre-computed signals (no LLM needed).
+If no API key is set, falls back to a feature-based heuristic agent.
 """
 
 import os
@@ -24,27 +23,41 @@ from src.env import SilentFailureDetectorEnv
 from src.models import SilentFailureAction, SilentFailureObservation
 
 
-# ── heuristic fallback agent ─────────────────────────────────────────────
-# Uses the features already computed in the observation — no text re-scan.
-# Decision rule (tuned for recall over precision):
-#   FLAG as risky (1) if:
-#     - confidence markers present AND no hedging  → obvious hallucination signal
-#     - confidence markers >= 2 (even with hedging) → overwhelming certainty
-#     - number_density > 0.05 AND confidence present → fabricated stats
-#   TRUST (0) otherwise
+# ── heuristic agent ──────────────────────────────────────────────────────
+# Uses pre-computed observation features — no text re-scan needed.
+#
+# Task-aware logic:
+#   EASY/MEDIUM: lexical signals are present → use confidence/hedging counts
+#   HARD: no reliable lexical cues → look for number fabrication patterns
+#         and domain-specific risk heuristics
 
-def heuristic_action(obs: SilentFailureObservation) -> int:
+def heuristic_action(obs: SilentFailureObservation, task: str = "easy") -> int:
     conf  = obs.confidence_marker_count
     hedge = obs.hedging_marker_count
     nums  = obs.number_density
 
-    if conf >= 1 and hedge == 0:
-        return 1          # confident with zero hedging → risky
-    if conf >= 2:
-        return 1          # overwhelming certainty even if some hedging
-    if conf >= 1 and nums > 0.05:
-        return 1          # confident + lots of numbers → likely fabricated stats
-    return 0
+    if task in ("easy", "medium"):
+        # Primary signals: confidence markers and hedging
+        if conf >= 1 and hedge == 0:
+            return 1      # confident, no hedging → risky
+        if conf >= 2:
+            return 1      # overwhelming certainty even with some hedging
+        if conf >= 1 and nums > 0.05:
+            return 1      # confident + fabricated stats pattern
+        return 0
+
+    else:  # hard — adversarial phrasing, low lexical cues
+        # Hard items often use specific numbers to seem authoritative
+        # without triggering certainty-word detectors
+        if nums > 0.08:
+            return 1      # high number density without hedging → fabricated stat
+        if nums > 0.04 and hedge == 0:
+            return 1      # any numbers + no hedging → suspicious
+        if conf >= 1 and hedge == 0:
+            return 1      # still catch obvious ones
+        # Conservative: trust if no signals detected
+        # (better than always-flag which collapses specificity)
+        return 0
 
 
 # ── action parsing ───────────────────────────────────────────────────────
@@ -81,16 +94,19 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_prompt(obs: SilentFailureObservation) -> str:
+def build_prompt(obs: SilentFailureObservation, task: str = "easy") -> str:
     if obs.confidence_marker_count > 0 and obs.hedging_marker_count == 0:
         hint = "WARNING: High confidence, no hedging — potential silent failure."
     elif obs.hedging_marker_count > 0:
         hint = "NOTE: Hedging language present — may be appropriately cautious."
+    elif task == "hard":
+        hint = "NOTE: Hard difficulty — watch for specific numbers or domain jargon used to fabricate authority."
     else:
         hint = ""
 
     return (
         f"Domain: {obs.domain}\n"
+        f"Difficulty: {task}\n"
         f"Confidence markers: {obs.confidence_marker_count} | "
         f"Hedging markers: {obs.hedging_marker_count} | "
         f"Number density: {obs.number_density:.3f}\n"
@@ -124,7 +140,7 @@ def evaluate_task(
                     model=model_name,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user",   "content": build_prompt(obs)},
+                        {"role": "user",   "content": build_prompt(obs, task)},
                     ],
                     temperature=0.0,
                     max_tokens=5,
@@ -133,21 +149,18 @@ def evaluate_task(
                 action_val = parse_model_action(raw)
                 source = f"llm raw='{raw.strip()}'"
             except Exception as exc:
-                action_val = heuristic_action(obs)
+                action_val = heuristic_action(obs, task)
                 source = f"heuristic (llm error: {type(exc).__name__})"
         else:
-            action_val = heuristic_action(obs)
+            action_val = heuristic_action(obs, task)
             source = "heuristic"
 
         obs = env.step(SilentFailureAction(action=action_val))
         reward = obs.reward if obs.reward is not None else 0.0
         done   = obs.done
 
-        flag = "FLAG" if action_val == 1 else "trust"
-        print(
-            f"  Step {step:>3}: {flag}  reward={reward:+.2f}  done={done}"
-            f"  [{source}]"
-        )
+        flag = "FLAG " if action_val == 1 else "trust"
+        print(f"  Step {step:>3}: {flag}  reward={reward:+.2f}  done={done}  [{source}]")
 
     result    = env.grader_score()
     score     = result.get("score", 0.0)
