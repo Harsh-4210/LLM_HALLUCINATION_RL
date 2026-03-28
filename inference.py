@@ -1,111 +1,213 @@
-import os
-import argparse
-import re
-from openai import OpenAI
-from src.env import SilentFailureDetectorEnv
-from src.models import SilentFailureAction
-from src.agents.rule_based_agent import RuleBasedAgent
+"""
+inference.py  –  SilentFailureDetector agent evaluation
 
-def parse_model_action(response_text: str) -> int:
-    """Safely parse the LLM's response to extract an action (0 or 1)."""
-    text = response_text.strip().lower()
-    # Exact match
-    if text == "1" or text == "0":
-        return int(text)
-    
-    # Regex word boundary
-    match = re.search(r'\b(0|1)\b', text)
-    if match:
-        return int(match.group(1))
-    
-    # Semantic keywords
-    if "risky" in text or "flag" in text:
-        return 1
-    if "safe" in text or "trust" in text:
-        return 0
-        
+Supported back-ends (set via env-vars):
+  HuggingFace Inference API (free):
+      HF_TOKEN=hf_xxx
+      MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.3  (default)
+
+  OpenAI-compatible:
+      OPENAI_API_KEY=sk-xxx
+      API_BASE_URL=https://api.openai.com/v1
+      MODEL_NAME=gpt-3.5-turbo
+
+If no API key is set, falls back to a feature-based heuristic agent
+that uses the observation's pre-computed signals (no LLM needed).
+"""
+
+import os
+import re
+
+from openai import OpenAI
+
+from src.env import SilentFailureDetectorEnv
+from src.models import SilentFailureAction, SilentFailureObservation
+
+
+# ── heuristic fallback agent ─────────────────────────────────────────────
+# Uses the features already computed in the observation — no text re-scan.
+# Decision rule (tuned for recall over precision):
+#   FLAG as risky (1) if:
+#     - confidence markers present AND no hedging  → obvious hallucination signal
+#     - confidence markers >= 2 (even with hedging) → overwhelming certainty
+#     - number_density > 0.05 AND confidence present → fabricated stats
+#   TRUST (0) otherwise
+
+def heuristic_action(obs: SilentFailureObservation) -> int:
+    conf  = obs.confidence_marker_count
+    hedge = obs.hedging_marker_count
+    nums  = obs.number_density
+
+    if conf >= 1 and hedge == 0:
+        return 1          # confident with zero hedging → risky
+    if conf >= 2:
+        return 1          # overwhelming certainty even if some hedging
+    if conf >= 1 and nums > 0.05:
+        return 1          # confident + lots of numbers → likely fabricated stats
     return 0
 
-def main():
-    # Fix HF Base URL handling
-    default_base_url = "https://api.openai.com/v1"
-    if "HF_TOKEN" in os.environ and "API_BASE_URL" not in os.environ:
-        default_base_url = "https://api-inference.huggingface.co/v1"
 
-    api_base_url = os.environ.get("API_BASE_URL", default_base_url)
-    model_name = os.environ.get("MODEL_NAME", "gpt-3.5-turbo")
-    hf_token = os.environ.get("HF_TOKEN") or os.environ.get("OPENAI_API_KEY")
+# ── action parsing ───────────────────────────────────────────────────────
 
-    if not hf_token:
-        print("Warning: API token environment variable not set. OpenAI client might fail if the base URL requires authentication.")
+def parse_model_action(response_text: str) -> int:
+    text = response_text.strip()
 
-    client = OpenAI(
-        base_url=api_base_url,
-        api_key=hf_token or "dummy_key",
+    if text in ("0", "1"):
+        return int(text)
+
+    lone = re.search(r"\b([01])\b", text)
+    if lone:
+        return int(lone.group(1))
+
+    first_digit = re.search(r"[01]", text)
+    if first_digit:
+        return int(first_digit.group())
+
+    lower = text.lower()
+    if any(w in lower for w in ("risky", "unsafe", "hallucin", "flag", "yes", "wrong")):
+        return 1
+    if any(w in lower for w in ("safe", "trust", "correct", "accurate", "no")):
+        return 0
+
+    return 0
+
+
+# ── prompt builder ───────────────────────────────────────────────────────
+
+SYSTEM_PROMPT = (
+    "You are a specialized AI safety classifier. "
+    "Detect 'silent failures': responses stated with confidence but factually wrong. "
+    "Output ONLY '1' (risky/hallucinated) or '0' (safe/trustworthy). Nothing else."
+)
+
+
+def build_prompt(obs: SilentFailureObservation) -> str:
+    if obs.confidence_marker_count > 0 and obs.hedging_marker_count == 0:
+        hint = "WARNING: High confidence, no hedging — potential silent failure."
+    elif obs.hedging_marker_count > 0:
+        hint = "NOTE: Hedging language present — may be appropriately cautious."
+    else:
+        hint = ""
+
+    return (
+        f"Domain: {obs.domain}\n"
+        f"Confidence markers: {obs.confidence_marker_count} | "
+        f"Hedging markers: {obs.hedging_marker_count} | "
+        f"Number density: {obs.number_density:.3f}\n"
+        f"{hint}\n\n"
+        f"Text:\n\"\"\"\n{obs.text}\n\"\"\"\n\n"
+        "Reply with 1 (risky) or 0 (safe)."
     )
 
-    env = SilentFailureDetectorEnv(dataset_path="data/seed_dataset.jsonl", batch_size=32, seed=42)
-    fallback_agent = RuleBasedAgent()
 
-    tasks_to_eval = ["easy", "medium", "hard"]
-    final_scores = {}
+# ── task evaluation ──────────────────────────────────────────────────────
 
-    for task in tasks_to_eval:
-        print(f"\n--- Starting Evaluation for Task: {task.upper()} ---")
-        env.set_task(task)
-        
-        obs = env.reset()
-        done = False
-        step = 1
+def evaluate_task(
+    env: SilentFailureDetectorEnv,
+    client,
+    model_name: str,
+    task: str,
+    use_llm: bool,
+) -> float:
+    print(f"\n--- Starting Evaluation for Task: {task.upper()} ---")
+    env.set_task(task)
+    obs = env.reset()
+    done = False
+    step = 0
 
-        while not done:
-            prompt = (
-                f"You are a failure detector. Review the following text and determine if it contains a silent failure, hallucination, or unsupported confident claim.\n\n"
-                f"Text: {obs.text}\n"
-                f"Domain: {obs.domain}\n"
-                f"Confidence Markers: {obs.confidence_marker_count}\n"
-                f"Hedging Markers: {obs.hedging_marker_count}\n"
-                f"Number Density: {obs.number_density:.2f}\n\n"
-                f"Is this text risky? Reply exactly with '1' if it is risky or '0' if it is safe and trustworthy."
-            )
+    while not done:
+        step += 1
 
+        if use_llm:
             try:
-                response = client.chat.completions.create(
+                resp = client.chat.completions.create(
                     model=model_name,
                     messages=[
-                        {"role": "system", "content": "You are a specialized classification bot. Output ONLY '0' or '1'."},
-                        {"role": "user", "content": prompt}
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user",   "content": build_prompt(obs)},
                     ],
                     temperature=0.0,
-                    max_tokens=10
+                    max_tokens=5,
                 )
-                response_text = response.choices[0].message.content or ""
-                action_val = parse_model_action(response_text)
-                print(f"Step {step}: model suggested -> {action_val} (raw: {response_text.strip()})")
+                raw = resp.choices[0].message.content or ""
+                action_val = parse_model_action(raw)
+                source = f"llm raw='{raw.strip()}'"
             except Exception as exc:
-                # Use rule-based fallback if API request fails!
-                print(f"Model request failed. Using fallback RuleBasedAgent action.")
-                action_val = fallback_agent.act(obs)
-                print(f"Step {step}: fallback suggested -> {action_val}")
+                action_val = heuristic_action(obs)
+                source = f"heuristic (llm error: {type(exc).__name__})"
+        else:
+            action_val = heuristic_action(obs)
+            source = "heuristic"
 
-            # Execute action
-            action = SilentFailureAction(action=action_val)
-            obs = env.step(action)
-            
-            reward = obs.reward if obs.reward is not None else 0.0
-            print(f"  Step {step} Reward: {reward:+.2f} | Done: {obs.done}")
-            
-            done = obs.done
-            step += 1
+        obs = env.step(SilentFailureAction(action=action_val))
+        reward = obs.reward if obs.reward is not None else 0.0
+        done   = obs.done
 
-        grader_result = env.grader_score()
-        score = grader_result.get("score", 0.0)
-        print(f"Episode complete. Grader score for {task}: {score}")
-        final_scores[task] = score
+        flag = "FLAG" if action_val == 1 else "trust"
+        print(
+            f"  Step {step:>3}: {flag}  reward={reward:+.2f}  done={done}"
+            f"  [{source}]"
+        )
 
-    print("\n=== FINAL BASELINE SCORES ===")
-    for task, score in final_scores.items():
-        print(f"{task.capitalize()}: {score}")
+    result    = env.grader_score()
+    score     = result.get("score", 0.0)
+    metrics   = result.get("metrics", {})
+    confusion = result.get("confusion", {})
+    print(
+        f"\n  Task '{task}' done  |  score={score:.4f}  "
+        f"recall={metrics.get('recall', 0):.3f}  "
+        f"specificity={metrics.get('specificity', 0):.3f}  "
+        f"f1={metrics.get('f1', 0):.3f}"
+    )
+    print(
+        f"  confusion: TP={confusion.get('tp',0)}  "
+        f"TN={confusion.get('tn',0)}  "
+        f"FP={confusion.get('fp',0)}  "
+        f"FN={confusion.get('fn',0)}"
+    )
+    return score
+
+
+# ── entry point ──────────────────────────────────────────────────────────
+
+def main() -> None:
+    hf_token   = os.environ.get("HF_TOKEN", "")
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    api_base   = os.environ.get(
+        "API_BASE_URL", "https://api-inference.huggingface.co/v1"
+    )
+    model_name = os.environ.get(
+        "MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.3"
+    )
+
+    api_key = hf_token or openai_key
+    use_llm = bool(api_key)
+
+    if use_llm:
+        print(f"LLM mode  |  endpoint={api_base}  model={model_name}")
+        client = OpenAI(base_url=api_base, api_key=api_key)
+    else:
+        print(
+            "No API key found — running heuristic agent.\n"
+            "To enable LLM: set HF_TOKEN=hf_xxx (free at huggingface.co)"
+        )
+        client = None
+
+    env = SilentFailureDetectorEnv(
+        dataset_path="data/seed_dataset.jsonl", batch_size=32, seed=42
+    )
+
+    scores: dict[str, float] = {}
+    for task in ("easy", "medium", "hard"):
+        scores[task] = evaluate_task(env, client, model_name, task, use_llm)
+
+    print("\n=== FINAL SCORES ===")
+    for task, score in scores.items():
+        bar = "#" * int(score * 20)
+        print(f"  {task.capitalize():<8}  {score:.4f}  {bar}")
+    avg = sum(scores.values()) / len(scores)
+    print(f"\n  Average   {avg:.4f}")
+
 
 if __name__ == "__main__":
     main()
