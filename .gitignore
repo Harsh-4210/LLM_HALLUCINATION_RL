@@ -6,3 +6,15 @@ venv/
 artifacts/
 .streamlit/
 .env
+
+# Project Planning
+MVP_SPEC.md
+implementation_plan.md
+task.md
+walkthrough.md
+
+# IDEs and OS
+.vscode/
+.idea/
+.DS_Store
+*.log
