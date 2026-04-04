@@ -21,8 +21,18 @@ No API key → deterministic heuristic agent.
 
 import os
 import re
+import json
 
 from openai import OpenAI
+
+def log_start(task: str, env: str, model: str):
+    print(f"[START] {json.dumps({'task': task, 'env': env, 'model': model})}", flush=True)
+
+def log_step(step: int, action: str, reward: float, done: bool, error: str = None):
+    print(f"[STEP] {json.dumps({'step': step, 'action': action, 'reward': float(reward), 'done': done, 'error': error})}", flush=True)
+
+def log_end(success: bool, steps: int, score: float, rewards: list):
+    print(f"[END] {json.dumps({'success': success, 'steps': steps, 'score': float(score), 'rewards': [float(r) for r in rewards]})}", flush=True)
 
 from src.env import SilentFailureDetectorEnv
 from src.models import SilentFailureAction, SilentFailureObservation
@@ -147,10 +157,13 @@ def evaluate_task(
     use_llm: bool,
 ) -> float:
     print(f"\n--- Starting Evaluation for Task: {task.upper()} ---")
+    log_start(task=task, env="SilentFailureDetector", model=model_name)
+    
     env.set_task(task)
     obs = env.reset()
     done = False
     step = 0
+    rewards = []
 
     while not done:
         step += 1
@@ -177,11 +190,14 @@ def evaluate_task(
             source = "heuristic"
 
         obs = env.step(SilentFailureAction(action=action_val))
-        reward = obs.reward if obs.reward is not None else 0.0
+        reward = float(obs.reward if obs.reward is not None else 0.0)
         done   = obs.done
+        rewards.append(reward)
 
         flag = "FLAG " if action_val == 1 else "trust"
         print(f"  Step {step:>3}: {flag}  reward={reward:+.2f}  done={done}  [{source}]")
+        
+        log_step(step=step, action=str(action_val), reward=reward, done=done, error=None)
 
     result    = env.grader_score()
     score     = result.get("score", 0.0)
@@ -199,6 +215,10 @@ def evaluate_task(
         f"FP={confusion.get('fp',0)}  "
         f"FN={confusion.get('fn',0)}"
     )
+    
+    success = score >= 0.5  # SUCCESS_SCORE_THRESHOLD
+    log_end(success=success, steps=step, score=score, rewards=rewards)
+    
     return score
 
 
