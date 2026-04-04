@@ -1,27 +1,19 @@
 from src.grader import compute_confusion, compute_metrics, compute_reward
 
+def test_perfect_recall():
+    conf = compute_confusion([1,1,0,0], [1,1,0,0])
+    m = compute_metrics(conf)
+    assert m["recall"] == 1.0
+    assert m["specificity"] == 1.0
 
-def test_confusion_counts() -> None:
-    y_true = [1, 1, 0, 0]
-    y_pred = [1, 0, 1, 0]
-    confusion = compute_confusion(y_true, y_pred)
-    assert confusion == {"tp": 1, "tn": 1, "fp": 1, "fn": 1}
+def test_degenerate_always_flag():
+    conf = compute_confusion([1,0,1,0], [1,1,1,1])
+    m = compute_metrics(conf)
+    score = compute_reward(m)
+    assert score == 0.0  # specificity = 0 → collapses to 0
 
-
-def test_metrics_range() -> None:
-    confusion = {"tp": 8, "tn": 12, "fp": 3, "fn": 2}
-    metrics = compute_metrics(confusion)
-    for key, value in metrics.items():
-        assert 0.0 <= value <= 1.0, f"{key} is out of range"
-
-
-def test_reward_zero_when_recall_or_specificity_zero() -> None:
-    metrics_zero_recall = {
-        "recall": 0.0,
-        "specificity": 1.0,
-        "precision": 0.0,
-        "f1": 0.0,
-        "false_alarm_rate": 0.0,
-        "miss_rate": 1.0,
-    }
-    assert compute_reward(metrics_zero_recall) == 0.0
+def test_degenerate_always_trust():
+    conf = compute_confusion([1,0,1,0], [0,0,0,0])
+    m = compute_metrics(conf)
+    score = compute_reward(m)
+    assert score == 0.0  # recall = 0 → collapses to 0

@@ -1,3 +1,14 @@
+---
+title: SilentFailureDetector
+emoji: 🚨
+colorFrom: red
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+tags:
+  - openenv
+---
 # SilentFailureDetector — OpenEnv RL Environment
 
 > **Meta × PyTorch × Scaler Hackathon** · Round 1 Submission
