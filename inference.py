@@ -225,19 +225,16 @@ def evaluate_task(
 # ── entry point ──────────────────────────────────────────────────────────
 
 def main() -> None:
-    hf_token   = os.environ.get("HF_TOKEN", "")
-    openai_key = os.environ.get("OPENAI_API_KEY", "")
-    api_base   = os.environ.get(
-        "API_BASE_URL", "https://api-inference.huggingface.co/v1"
-    )
-    model_name = os.environ.get("MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.3")
+    API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1")
+    MODEL_NAME = os.getenv("MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.3")
+    HF_TOKEN = os.getenv("HF_TOKEN")
 
-    api_key = hf_token or openai_key
+    api_key = HF_TOKEN or os.getenv("OPENAI_API_KEY")
     use_llm = bool(api_key)
 
     if use_llm:
-        print(f"LLM mode  |  endpoint={api_base}  model={model_name}")
-        client = OpenAI(base_url=api_base, api_key=api_key)
+        print(f"LLM mode  |  endpoint={API_BASE_URL}  model={MODEL_NAME}")
+        client = OpenAI(base_url=API_BASE_URL, api_key=api_key)
     else:
         print(
             "No API key found — running heuristic agent.\n"
@@ -251,7 +248,7 @@ def main() -> None:
 
     scores: dict[str, float] = {}
     for task in ("easy", "medium", "hard"):
-        scores[task] = evaluate_task(env, client, model_name, task, use_llm)
+        scores[task] = evaluate_task(env, client, MODEL_NAME, task, use_llm)
 
     print("\n=== FINAL SCORES ===")
     for task, score in scores.items():
