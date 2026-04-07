@@ -89,7 +89,7 @@ def compute_reward(metrics: dict[str, float], calibration_bonus: float = 0.0) ->
                            Range [0, 1].  Default 0.0 (backward-compatible).
 
     Returns:
-        Float in [0.0, 1.0].
+        Float strictly in (0.0, 1.0), clamped to [0.001, 0.999].
     """
     recall      = metrics["recall"]
     specificity = metrics["specificity"]
@@ -108,4 +108,4 @@ def compute_reward(metrics: dict[str, float], calibration_bonus: float = 0.0) ->
     miss_penalty = miss_rate * 0.2
 
     score = base + precision_bonus - miss_penalty
-    return float(max(0.0, min(1.0, score)))
+    return float(max(0.01, min(0.99, score)))

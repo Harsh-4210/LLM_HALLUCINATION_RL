@@ -200,7 +200,8 @@ def evaluate_task(
         log_step(step=step, action=str(action_val), reward=reward, done=done, error=None)
 
     result    = env.grader_score()
-    score     = result.get("score", 0.0)
+    score     = result.get("score", 0.01)
+    score     = max(0.01, min(0.99, score))
     metrics   = result.get("metrics", {})
     confusion = result.get("confusion", {})
     print(

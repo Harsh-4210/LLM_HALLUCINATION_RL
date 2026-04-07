@@ -210,7 +210,7 @@ class SilentFailureDetectorEnv(
     def grader_score(self) -> dict:
         """Return grader result with score in 0.0–1.0 range."""
         if not self.y_true or not self.y_pred:
-            return {"score": 0.0, "message": "No episode data yet."}
+            return {"score": 0.01, "message": "No episode data yet."}
         confusion = compute_confusion(self.y_true, self.y_pred)
         metrics = compute_metrics(confusion)
         score = compute_reward(metrics, calibration_bonus=0.0)
