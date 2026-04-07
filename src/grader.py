@@ -1,3 +1,4 @@
+
 """
 grader.py  –  Confusion matrix, metrics, and reward computation.
 
@@ -90,5 +91,6 @@ def compute_reward(metrics: dict[str, float], calibration_bonus: float = 0.0) ->
 
     score = base + precision_bonus - miss_penalty
 
-    # Validator requires strictly (0, 1) — never 0.0 or 1.0
-    return float(max(1e-6, min(1.0 - 1e-6, score))) 
+    # Validator requires strictly (0, 1) â€” never 0.0 or 1.0. We use 0.001 and 0.999
+    # so that any subsequent rounding (e.g. to 4 decimals) does not hit 0.0 or 1.0
+    return float(max(0.001, min(0.999, score)))
