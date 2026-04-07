@@ -94,8 +94,7 @@ class SilentFailureDetectorEnv(
         return self._build_observation(self.episode_samples[0])
 
     def _step_reward(self, truth: int, pred: int) -> float:
-        # In MVP, the only reward that matters for the score is the final episode reward.        
-        # Intermediate steps shouldn't leak negative accumulated scores that violate strictly (0, 1)        
+        # Keep intermediate rewards neutral; final task score is emitted at episode end.
         return 0.0
 
     def step(
@@ -140,13 +139,8 @@ class SilentFailureDetectorEnv(
                 done=True,
                 reward=reward,
                 metadata={
-                    "confusion": confusion,
-                    "metrics": metrics,
-                    "final_bonus": final_bonus,
-                    "episode_reward": self.total_reward,
+                    "score": round(final_bonus, 4),
                     "sample_id": sample.id,
-                    "label": sample.label,
-                    "is_risky": truth,
                 },
             )
         else:
@@ -154,8 +148,6 @@ class SilentFailureDetectorEnv(
             obs = self._build_observation(next_sample, done=False, reward=reward)
             obs.metadata = {
                 "sample_id": sample.id,
-                "label": sample.label,
-                "is_risky": truth,
             }
             return obs
 
@@ -206,12 +198,10 @@ class SilentFailureDetectorEnv(
     def grader_score(self) -> dict:
         """Return grader result with score in 0.0–1.0 range."""
         if not self.y_true or not self.y_pred:
-            return {"score": 0.01, "message": "No episode data yet."}
+            return {"score": 0.01}
         confusion = compute_confusion(self.y_true, self.y_pred)
         metrics = compute_metrics(confusion)
         score = compute_reward(metrics, calibration_bonus=0.0)
         return {
             "score": round(score, 4),
-            "confusion": confusion,
-            "metrics": metrics,
         }

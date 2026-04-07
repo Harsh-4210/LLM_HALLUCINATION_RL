@@ -58,8 +58,6 @@ def baseline() -> dict:
         )
         results[task_name] = {
             "score": result["reward_total"],
-            "metrics": result["metrics"],
-            "confusion": result["confusion"],
         }
     return {"baseline": results}
 

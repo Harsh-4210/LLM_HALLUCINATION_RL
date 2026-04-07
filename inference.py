@@ -205,20 +205,7 @@ def evaluate_task(
     result    = env.grader_score()
     score     = result.get("score", 0.01)
     score     = max(0.01, min(0.99, score))
-    metrics   = result.get("metrics", {})
-    confusion = result.get("confusion", {})
-    print(
-        f"\n  Task '{task}' done  |  score={score:.4f}  "
-        f"recall={metrics.get('recall', 0):.3f}  "
-        f"specificity={metrics.get('specificity', 0):.3f}  "
-        f"f1={metrics.get('f1', 0):.3f}"
-    )
-    print(
-        f"  confusion: TP={confusion.get('tp',0)}  "
-        f"TN={confusion.get('tn',0)}  "
-        f"FP={confusion.get('fp',0)}  "
-        f"FN={confusion.get('fn',0)}"
-    )
+    print(f"\n  Task '{task}' done  |  score={score:.4f}")
     
     success = score >= 0.5  # SUCCESS_SCORE_THRESHOLD
     log_end(success=success, steps=step, score=score, rewards=rewards)
