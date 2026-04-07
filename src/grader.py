@@ -91,5 +91,6 @@ def compute_reward(metrics: dict[str, float], calibration_bonus: float = 0.0) ->
 
     score = float(base + precision_bonus - miss_penalty)
 
-    # Return naturally smoothed score without flat-clipping at 0.001
-    return max(0.0001, min(0.9999, score))
+    # Return naturally smoothed score safely bounded above 0.01 and below 0.99
+    # so that when formatted to .2f inside inference logs, it never prints 0.00 or 1.00       
+    return max(0.01, min(0.99, score))
