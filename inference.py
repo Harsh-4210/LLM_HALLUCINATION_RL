@@ -26,14 +26,17 @@ import json
 from openai import OpenAI
 
 def log_start(task: str, env: str, model: str):
-    print(f"[START] {json.dumps({'task': task, 'env': env, 'model': model})}", flush=True)
+    print(f"[START] task={task} env={env} model={model}", flush=True)
 
 def log_step(step: int, action: str, reward: float, done: bool, error: str = None):
-    print(f"[STEP] {json.dumps({'step': step, 'action': action, 'reward': float(reward), 'done': done, 'error': error})}", flush=True)
+    done_str = "true" if done else "false"
+    error_str = error if error else "null"
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={error_str}", flush=True)
 
 def log_end(success: bool, steps: int, score: float, rewards: list):
-    print(f"[END] {json.dumps({'success': success, 'steps': steps, 'score': float(score), 'rewards': [float(r) for r in rewards]})}", flush=True)
-
+    success_str = "true" if success else "false"
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={success_str} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
 from src.env import SilentFailureDetectorEnv
 from src.models import SilentFailureAction, SilentFailureObservation
 
