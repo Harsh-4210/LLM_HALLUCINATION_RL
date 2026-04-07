@@ -94,13 +94,9 @@ class SilentFailureDetectorEnv(
         return self._build_observation(self.episode_samples[0])
 
     def _step_reward(self, truth: int, pred: int) -> float:
-        if truth == 1 and pred == 1:
-            return 1.0
-        if truth == 0 and pred == 0:
-            return 0.5
-        if truth == 0 and pred == 1:
-            return -1.0
-        return -1.5  # missed a risky one
+        # In MVP, the only reward that matters for the score is the final episode reward.        
+        # Intermediate steps shouldn't leak negative accumulated scores that violate strictly (0, 1)        
+        return 0.0
 
     def step(
         self,
