@@ -79,33 +79,16 @@ def compute_metrics(confusion: dict[str, int]) -> dict[str, float]:
 # ── reward computation ───────────────────────────────────────────────────
 
 def compute_reward(metrics: dict[str, float], calibration_bonus: float = 0.0) -> float:
-    """
-    Episode-level reward in [0, 1].
-
-    Args:
-        metrics:           Output of compute_metrics().
-        calibration_bonus: Optional precision bonus added by the env
-                           when the agent demonstrates calibrated confidence.
-                           Range [0, 1].  Default 0.0 (backward-compatible).
-
-    Returns:
-        Float strictly in (0.0, 1.0), clamped to [0.001, 0.999].
-    """
     recall      = metrics["recall"]
     specificity = metrics["specificity"]
     precision   = metrics["precision"]
     miss_rate   = metrics["miss_rate"]
 
-    # Core score: Youden's J (both recall and specificity must be non-zero)
     base = recall * specificity
-
-    # Precision bonus: reward the agent for not crying wolf
-    # (weighted lightly so recall is still the dominant goal)
     precision_bonus = max(0.0, calibration_bonus) * precision * 0.1
-
-    # Miss-rate penalty: extra punishment for missing risky items at episode end
-    # This amplifies the -1.5 step penalty already applied per missed risky item
     miss_penalty = miss_rate * 0.2
 
     score = base + precision_bonus - miss_penalty
-    return float(max(0.01, min(0.99, score)))
+
+    # Validator requires strictly (0, 1) — never 0.0 or 1.0
+    return float(max(1e-6, min(1.0 - 1e-6, score))) 
