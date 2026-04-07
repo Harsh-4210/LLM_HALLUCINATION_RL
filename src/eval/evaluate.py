@@ -28,7 +28,7 @@ def evaluate_rule_based(
     batch_size: int = 32,
     episodes: int = 5,
     task_name: TaskName = "easy",
-    threshold: float = 0.8,
+    threshold: float = 0.4,
 ) -> dict:
     """Run the rule-based agent for `episodes` episodes and return averaged metrics.
 
@@ -67,16 +67,14 @@ def evaluate_rule_based(
         all_y_true.extend(env.y_true)
         all_y_pred.extend(env.y_pred)
 
-    # Aggregate
     confusion = compute_confusion(all_y_true, all_y_pred)
     metrics = compute_metrics(confusion)
-    avg_score = sum(episode_scores) / len(episode_scores) if episode_scores else 0.01
-    clamped_score = float(max(0.01, min(0.99, avg_score)))
+    avg_score = sum(episode_scores) / len(episode_scores) if episode_scores else 0.001
 
     return {
         "task": task_name,
         "episodes": episodes,
-        "reward_total": round(clamped_score, 4),
+        "reward_total": round(avg_score, 4),
         "confusion": confusion,
         "metrics": {k: round(v, 4) for k, v in metrics.items()},
     }

@@ -21,7 +21,7 @@ class RuleBasedAgent:
     F1 on the seed dataset's easy split.
     """
 
-    def __init__(self, threshold: float = 0.8) -> None:
+    def __init__(self, threshold: float = 0.4) -> None:
         self.threshold = threshold
 
     def act(self, obs: SilentFailureObservation) -> int:

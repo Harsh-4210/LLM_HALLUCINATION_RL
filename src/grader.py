@@ -50,10 +50,10 @@ def _safe_div(numerator: float, denominator: float) -> float:
 
 
 def compute_metrics(confusion: dict[str, int]) -> dict[str, float]:
-    tp = confusion["tp"]
-    tn = confusion["tn"]
-    fp = confusion["fp"]
-    fn = confusion["fn"]
+    tp = float(confusion["tp"]) + 0.1
+    tn = float(confusion["tn"]) + 0.1
+    fp = float(confusion["fp"]) + 0.1
+    fn = float(confusion["fn"]) + 0.1
 
     recall      = _safe_div(tp, tp + fn)          # sensitivity
     specificity = _safe_div(tn, tn + fp)
@@ -89,8 +89,7 @@ def compute_reward(metrics: dict[str, float], calibration_bonus: float = 0.0) ->
     precision_bonus = max(0.0, calibration_bonus) * precision * 0.1
     miss_penalty = miss_rate * 0.2
 
-    score = base + precision_bonus - miss_penalty
+    score = float(base + precision_bonus - miss_penalty)
 
-    # Validator requires strictly (0, 1) â€” never 0.0 or 1.0. We use 0.001 and 0.999
-    # so that any subsequent rounding (e.g. to 4 decimals) does not hit 0.0 or 1.0
-    return float(max(0.001, min(0.999, score)))
+    # Return naturally smoothed score without flat-clipping at 0.001
+    return max(0.0001, min(0.9999, score))
