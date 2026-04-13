@@ -1,8 +1,10 @@
 """FastAPI server combining OpenEnv core endpoints with hackathon custom endpoints."""
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, RedirectResponse
 from openenv.core.env_server import create_fastapi_app
 
 from src.agents.rule_based_agent import RuleBasedAgent
@@ -35,9 +37,65 @@ _agent = RuleBasedAgent()
 # ── Hackathon-required custom endpoints ─────────────────────────────────
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
+def root():
+    """Redirect root to the interactive reviewer dashboard."""
+    return RedirectResponse(url="/ui")
+
+
+@app.get("/ui", response_class=HTMLResponse, include_in_schema=False)
+def ui_dashboard():
+    """Interactive HTML reviewer dashboard — inspect live episode state, scores and task config."""
+    ui_path = Path("ui/index.html")
+    if ui_path.exists():
+        return HTMLResponse(content=ui_path.read_text(encoding="utf-8"))
+    # Minimal inline fallback if file is missing
+    return HTMLResponse(content="""
+    <!DOCTYPE html><html><head><title>SilentFailureDetector</title>
+    <meta charset='utf-8'/></head><body>
+    <h1>SilentFailureDetector Dashboard</h1>
+    <p>UI file not found. Run: <code>uvicorn main:app</code> from the project root.</p>
+    </body></html>""")
+
+
+@app.get("/info")
+def info() -> dict:
+    """Service metadata and runtime diagnostics."""
+    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("HF_TOKEN")
+    model_name = os.getenv("MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.3")
+    return {
+        "name": "SilentFailureDetector",
+        "version": "0.1.0",
+        "description": "OpenEnv RL environment for detecting confident-but-wrong AI outputs.",
+        "tasks": ["easy", "medium", "hard"],
+        "action_space": {"type": "discrete", "values": [0, 1], "meaning": {"0": "trust", "1": "flag_risky"}},
+        "runtime": {
+            "llm_mode": bool(api_key),
+            "model": model_name if api_key else "heuristic_rule_based",
+            "api_key_set": bool(api_key),
+        },
+    }
+
+
+@app.get("/runtime-config")
+def runtime_config() -> dict:
+    """Expose exactly which backend is active — useful for debugging evaluator runs."""
+    api_key    = os.getenv("OPENAI_API_KEY") or os.getenv("HF_TOKEN")
+    api_base   = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+    model_name = os.getenv("MODEL_NAME",   "mistralai/Mistral-7B-Instruct-v0.3")
+    return {
+        "mode":        "llm" if api_key else "heuristic",
+        "model":       model_name if api_key else None,
+        "api_base_url": api_base  if api_key else None,
+        "fallback":    "rule_based_heuristic",
+        "note":        "Set HF_TOKEN + MODEL_NAME env vars to enable LLM mode.",
+    }
+
+
+@app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "env": "SilentFailureDetector"}
+    """Health check endpoint — returns 200 when service is up."""
+    return {"status": "ok", "env": "SilentFailureDetector", "version": "0.1.0"}
 
 
 @app.get("/tasks")
@@ -45,6 +103,7 @@ def tasks() -> dict:
     return {"tasks": _shared_env.tasks()}
 
 
+@app.post("/baseline")
 @app.get("/baseline")
 def baseline() -> dict:
     """Run baseline agent and return reproducible scores for all 3 tasks."""
@@ -57,7 +116,11 @@ def baseline() -> dict:
             task_name=task_name,
         )
         results[task_name] = {
-            "score": result["reward_total"],
+            "score":       result["reward_total"],
+            "recall":      result["metrics"].get("recall", 0.0),
+            "specificity": result["metrics"].get("specificity", 0.0),
+            "f1":          result["metrics"].get("f1", 0.0),
+            "miss_rate":   result["metrics"].get("miss_rate", 0.0),
         }
     return {"baseline": results}
 

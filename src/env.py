@@ -94,8 +94,23 @@ class SilentFailureDetectorEnv(
         return self._build_observation(self.episode_samples[0])
 
     def _step_reward(self, truth: int, pred: int) -> float:
-        # Keep intermediate rewards neutral; final task score is emitted at episode end.
-        return 0.0
+        """Asymmetric per-step reward that mirrors README documentation.
+
+        Outcome          Reward  Rationale
+        ────────         ──────  ─────────────────────────────────────────────────
+        True Positive    +1.0   Caught a hallucination  (primary safety goal)
+        True Negative    +0.5   Correctly trusted a safe response
+        False Positive   -1.0   Cried wolf — disruptive, wastes analyst time
+        False Negative   -1.5   Missed a dangerous hallucination  (worst outcome)
+        """
+        if truth == 1 and pred == 1:
+            return 1.0   # TP: caught risky
+        elif truth == 0 and pred == 0:
+            return 0.5   # TN: correctly trusted
+        elif truth == 0 and pred == 1:
+            return -1.0  # FP: false alarm
+        else:
+            return -1.5  # FN: missed hallucination (most dangerous)
 
     def step(
         self,

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SilentFailureDetector — Reviewer Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --accent: #f78166;
+      --accent2: #79c0ff;
+      --accent3: #56d364;
+      --warn: #d29922;
+      --text: #c9d1d9;
+      --muted: #8b949e;
+      --font: 'Segoe UI', system-ui, sans-serif;
+      --mono: 'Cascadia Code', 'Fira Code', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 600; color: var(--accent); }
+    header .badge {
+      background: #21262d;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent3);
+      box-shadow: 0 0 6px var(--accent3);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    .card h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: .75rem; }
+    .metric-value { font-size: 2rem; font-weight: 700; font-family: var(--mono); color: var(--accent2); }
+    .metric-label { font-size: 0.8rem; color: var(--muted); margin-top: .25rem; }
+
+    .section-title { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 .75rem; border-left: 3px solid var(--accent); padding-left: .75rem; }
+
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; overflow: hidden; }
+    th { background: #21262d; padding: .6rem 1rem; text-align: left; font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    td { padding: .6rem 1rem; border-top: 1px solid var(--border); font-size: .875rem; font-family: var(--mono); }
+    tr:hover td { background: #21262d; }
+
+    .badge-safe   { background: #1a3a2a; color: var(--accent3); border: 1px solid #2ea04326; }
+    .badge-risky  { background: #3a1a1a; color: var(--accent);  border: 1px solid #f7816626; }
+    .badge-level  { background: #1a2a3a; color: var(--accent2); border: 1px solid #79c0ff26; }
+    .badge { border-radius: 4px; padding: 2px 8px; font-size: .75rem; }
+
+    .bar-wrap { background: #21262d; border-radius: 4px; height: 8px; overflow: hidden; margin-top: .4rem; }
+    .bar { height: 100%; border-radius: 4px; transition: width .6s ease; }
+
+    input, select, button {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: .5rem .75rem;
+      font-size: .875rem;
+      font-family: var(--font);
+    }
+    button {
+      background: var(--accent);
+      color: #0d1117;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity .15s;
+    }
+    button:hover { opacity: .85; }
+    button:disabled { opacity: .4; cursor: default; }
+
+    .controls { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; margin-bottom: 1.5rem; }
+    .log { background: #0a0e13; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; font-family: var(--mono); font-size: .8rem; max-height: 280px; overflow-y: auto; }
+    .log-line { padding: 2px 0; border-bottom: 1px solid #1a1f27; }
+    .log-line:last-child { border-bottom: none; }
+    .log-tp { color: var(--accent3); }
+    .log-tn { color: var(--accent2); }
+    .log-fp { color: var(--warn); }
+    .log-fn { color: var(--accent); }
+
+    #score-display { font-size: 3rem; font-weight: 700; font-family: var(--mono); }
+    .score-ok   { color: var(--accent3); }
+    .score-mid  { color: var(--warn); }
+    .score-bad  { color: var(--accent); }
+
+    footer { text-align: center; color: var(--muted); font-size: .75rem; padding: 2rem; border-top: 1px solid var(--border); margin-top: 3rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="status-dot" id="status-dot"></div>
+  <h1>🚨 SilentFailureDetector</h1>
+  <span class="badge">OpenEnv RL Environment</span>
+  <span class="badge" id="mode-badge">mode: loading…</span>
+  <span style="flex:1"></span>
+  <span class="badge" style="color:var(--accent2)" id="server-url-badge">api: localhost:7860</span>
+</header>
+
+<main>
+  <!-- ── Metrics overview ── -->
+  <div class="section-title">Episode Metrics</div>
+  <div class="grid" id="metrics-grid">
+    <div class="card">
+      <h2>Grader Score</h2>
+      <div id="score-display" class="score-bad">—</div>
+      <div class="metric-label">Youden's J − miss_rate penalty · range (0.01, 0.99)</div>
+    </div>
+    <div class="card">
+      <h2>Recall</h2>
+      <div class="metric-value" id="m-recall">—</div>
+      <div class="bar-wrap"><div class="bar" id="bar-recall" style="width:0%;background:var(--accent3)"></div></div>
+      <div class="metric-label">Hallucinations caught</div>
+    </div>
+    <div class="card">
+      <h2>Specificity</h2>
+      <div class="metric-value" id="m-spec">—</div>
+      <div class="bar-wrap"><div class="bar" id="bar-spec" style="width:0%;background:var(--accent2)"></div></div>
+      <div class="metric-label">Safe responses correctly trusted</div>
+    </div>
+    <div class="card">
+      <h2>Miss Rate</h2>
+      <div class="metric-value" id="m-miss">—</div>
+      <div class="bar-wrap"><div class="bar" id="bar-miss" style="width:0%;background:var(--accent)"></div></div>
+      <div class="metric-label">Hallucinations missed (lower = better)</div>
+    </div>
+  </div>
+
+  <!-- ── Episode runner ── -->
+  <div class="section-title">Run Episode</div>
+  <div class="controls">
+    <label>Task:
+      <select id="task-select">
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+    </label>
+    <label>Agent:
+      <select id="agent-select">
+        <option value="always_flag">Always Flag (degenerate)</option>
+        <option value="always_trust">Always Trust (degenerate)</option>
+        <option value="heuristic" selected>Heuristic (rule-based)</option>
+      </select>
+    </label>
+    <button id="run-btn" onclick="runEpisode()">▶ Run Episode</button>
+    <button onclick="refreshState()" style="background:#21262d;color:var(--text)">↻ Refresh State</button>
+  </div>
+  <div class="log" id="step-log"><div class="log-line" style="color:var(--muted)">No episode run yet. Click "Run Episode" above.</div></div>
+
+  <!-- ── Baseline table ── -->
+  <div class="section-title">Baseline Scores (All Tasks)</div>
+  <table id="baseline-table">
+    <thead><tr><th>Task</th><th>Score</th><th>Recall</th><th>Specificity</th><th>F1</th><th>Miss Rate</th></tr></thead>
+    <tbody id="baseline-body"><tr><td colspan="6" style="color:var(--muted)">Loading baseline…</td></tr></tbody>
+  </table>
+
+  <!-- ── Runtime info ── -->
+  <div class="section-title">Runtime Configuration</div>
+  <div class="card"><pre id="runtime-pre" style="font-size:.8rem;font-family:var(--mono);white-space:pre-wrap">Loading…</pre></div>
+</main>
+
+<footer>SilentFailureDetector · OpenEnv RL Environment · Meta × PyTorch × Scaler Hackathon</footer>
+
+<script>
+  const BASE = window.location.origin;
+
+  // ── Utilities ────────────────────────────────────────────────────────────
+  const $  = id => document.getElementById(id);
+  const fmt = v  => (v === null || v === undefined) ? '—' : (typeof v === 'number' ? v.toFixed(4) : v);
+  const pct = v  => Math.round((v || 0) * 100);
+
+  function setBar(id, val) {
+    const bar = $(id);
+    if (bar) bar.style.width = pct(val) + '%';
+  }
+
+  function scoreClass(s) {
+    if (s >= 0.60) return 'score-ok';
+    if (s >= 0.35) return 'score-mid';
+    return 'score-bad';
+  }
+
+  function logLine(text, cls) {
+    const log = $('step-log');
+    const div = document.createElement('div');
+    div.className = 'log-line ' + (cls || '');
+    div.textContent = text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // ── Runtime config ────────────────────────────────────────────────────────
+  async function loadRuntimeConfig() {
+    try {
+      const r = await fetch(`${BASE}/runtime-config`);
+      const d = await r.json();
+      $('runtime-pre').textContent = JSON.stringify(d, null, 2);
+      $('mode-badge').textContent = `mode: ${d.mode}`;
+      // Update status dot
+      $('status-dot').style.background = r.ok ? 'var(--accent3)' : 'var(--accent)';
+    } catch (e) {
+      $('runtime-pre').textContent = `Error: ${e.message}`;
+      $('status-dot').style.background = 'var(--accent)';
+    }
+  }
+
+  // ── State refresh ─────────────────────────────────────────────────────────
+  async function refreshState() {
+    try {
+      const r = await fetch(`${BASE}/grader`);
+      if (!r.ok) return;
+      const d = await r.json();
+      const score = d.score ?? 0;
+      const el = $('score-display');
+      el.textContent = score.toFixed(4);
+      el.className = scoreClass(score);
+    } catch (_) {}
+  }
+
+  // ── Baseline loader ───────────────────────────────────────────────────────
+  async function loadBaseline() {
+    try {
+      const r = await fetch(`${BASE}/baseline`, { method: 'POST' });
+      if (!r.ok) throw new Error(r.statusText);
+      const data = await r.json();
+      const body = $('baseline-body');
+      body.innerHTML = '';
+      const tasks = data.baseline || {};
+      for (const [task, info] of Object.entries(tasks)) {
+        const sc = info.score ?? 0;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><span class="badge badge-level">${task}</span></td>
+          <td style="color:${sc>=0.6?'var(--accent3)':sc>=0.35?'var(--warn)':'var(--accent)'}">${fmt(sc)}</td>
+          <td>${fmt(info.recall)}</td>
+          <td>${fmt(info.specificity)}</td>
+          <td>${fmt(info.f1)}</td>
+          <td>${fmt(info.miss_rate)}</td>`;
+        body.appendChild(row);
+      }
+    } catch (e) {
+      $('baseline-body').innerHTML = `<tr><td colspan="6" style="color:var(--accent)">Failed to load baseline: ${e.message}</td></tr>`;
+    }
+  }
+
+  // ── Episode runner ────────────────────────────────────────────────────────
+  let episodeActive = false;
+
+  async function runEpisode() {
+    if (episodeActive) return;
+    episodeActive = true;
+    $('run-btn').disabled = true;
+    $('step-log').innerHTML = '';
+
+    const task = $('task-select').value;
+    const agent = $('agent-select').value;
+    logLine(`[START] task=${task}  agent=${agent}`, '');
+
+    try {
+      // Reset
+      const resetResp = await fetch(`${BASE}/reset`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ task_name: task }),
+      });
+      if (!resetResp.ok) throw new Error('Reset failed: ' + resetResp.statusText);
+      let obs = await resetResp.json();
+
+      let step = 0;
+      let done = obs.done ?? false;
+
+      while (!done) {
+        step++;
+        // Choose action based on selected agent
+        let action = 0;
+        if (agent === 'always_flag') action = 1;
+        else if (agent === 'always_trust') action = 0;
+        else {
+          // Simple heuristic
+          const conf = obs.confidence_marker_count ?? 0;
+          const hedge = obs.hedging_marker_count ?? 0;
+          const nums = obs.number_density ?? 0;
+          const score = 0.7 * conf - 0.5 * hedge + 2.0 * nums;
+          action = score >= 0.4 ? 1 : 0;
+        }
+
+        const stepResp = await fetch(`${BASE}/step`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ action }),
+        });
+        if (!stepResp.ok) throw new Error('Step failed: ' + stepResp.statusText);
+        obs = await stepResp.json();
+
+        const reward = obs.reward ?? 0;
+        done = obs.done ?? false;
+        const flag = action === 1 ? '⚑ FLAG' : '✓ trust';
+        const cls = reward > 0 ? (action === 1 ? 'log-tp' : 'log-tn') : (action === 1 ? 'log-fp' : 'log-fn');
+        logLine(`  Step ${String(step).padStart(3,' ')}: ${flag}  reward=${reward >= 0 ? '+' : ''}${reward.toFixed(2)}  done=${done}`, cls);
+      }
+
+      // Fetch grader score
+      const gr = await fetch(`${BASE}/grader`);
+      const grData = await gr.json();
+      const finalScore = grData.score ?? 0;
+      logLine(``, '');
+      logLine(`[END] score=${finalScore.toFixed(4)}  steps=${step}`, finalScore >= 0.5 ? 'log-tp' : 'log-fn');
+
+      // Update metrics panel
+      $('score-display').textContent = finalScore.toFixed(4);
+      $('score-display').className = scoreClass(finalScore);
+
+    } catch (e) {
+      logLine(`[ERROR] ${e.message}`, 'log-fn');
+    } finally {
+      episodeActive = false;
+      $('run-btn').disabled = false;
+    }
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+  (async () => {
+    $('server-url-badge').textContent = `api: ${window.location.host}`;
+    await loadRuntimeConfig();
+    await refreshState();
+  })();
+</script>
+</body>
+</html>

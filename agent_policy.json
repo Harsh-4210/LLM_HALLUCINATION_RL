@@ -1,0 +1,56 @@
+{
+  "name": "SilentFailureDetector Agent Policy",
+  "version": "0.1.0",
+  "description": "Binary classifier agent that detects silent AI failures — responses that are confidently wrong.",
+  "action_space": {
+    "type": "discrete",
+    "size": 2,
+    "values": {
+      "0": {
+        "label": "trust",
+        "meaning": "The response is safe or correct. No action required."
+      },
+      "1": {
+        "label": "flag_risky",
+        "meaning": "The response is a suspected silent failure — confidently wrong. Flag for review."
+      }
+    }
+  },
+  "target_class": "wrong_confident",
+  "label_taxonomy": {
+    "correct_cautious": {"is_risky": 0, "description": "Factually correct, uses hedging language."},
+    "correct_confident": {"is_risky": 0, "description": "Factually correct, states facts confidently."},
+    "wrong_cautious":   {"is_risky": 0, "description": "Factually wrong but appropriately hedged."},
+    "wrong_confident":  {"is_risky": 1, "description": "Factually wrong AND stated with high confidence — silent failure."}
+  },
+  "inference_modes": {
+    "llm": {
+      "description": "Queries an LLM API (OpenAI/HuggingFace/Ollama-compatible) with a balanced system prompt.",
+      "env_vars": ["OPENAI_API_KEY or HF_TOKEN", "API_BASE_URL", "MODEL_NAME"],
+      "fallback": "heuristic"
+    },
+    "heuristic": {
+      "description": "Deterministic rule-based agent using confidence/hedging markers + number density.",
+      "requires_api": false,
+      "always_available": true
+    }
+  },
+  "reward_structure": {
+    "per_step": {
+      "true_positive":  +1.0,
+      "true_negative":  +0.5,
+      "false_positive": -1.0,
+      "false_negative": -1.5
+    },
+    "episode_final": {
+      "formula": "recall × specificity − (miss_rate × 0.2)",
+      "name": "Youden's J with miss-rate penalty",
+      "output_range": [0.01, 0.99]
+    }
+  },
+  "task_levels": {
+    "easy":   "Obvious certainty terms, clear hallucinations, minimal ambiguity.",
+    "medium": "Subtle markers, some edge cases, requires contextual reasoning.",
+    "hard":   "Adversarial phrasing, domain jargon, low lexical cues — semantic understanding required."
+  }
+}

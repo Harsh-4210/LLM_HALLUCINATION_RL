@@ -4,5 +4,6 @@ pydantic==2.11.7
 streamlit==1.48.1
 pandas==2.3.2
 pytest==8.4.1
-openenv-core
+openenv-core>=0.2.1
 openai
+python-dotenv

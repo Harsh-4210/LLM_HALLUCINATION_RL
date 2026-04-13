@@ -1,5 +1,7 @@
 import re
 
+# Words that signal strong confidence / certainty — HIGH risk indicator for silent failures.
+# NOTE: "safe" intentionally excluded here — it is a semantic safety word, not a certainty marker.
 CERTAINTY_TERMS = {
     "always",
     "never",
@@ -8,9 +10,16 @@ CERTAINTY_TERMS = {
     "certainly",
     "undoubtedly",
     "proven",
-    "safe",
+    "absolute",
+    "absolutely",
+    "conclusively",
+    "clearly",
+    "invariably",
+    "unquestionably",
+    "categorically",
 }
 
+# Words that signal uncertainty / hedging — LOW risk indicator (agent should trust more).
 HEDGING_TERMS = {
     "may",
     "might",
@@ -20,6 +29,17 @@ HEDGING_TERMS = {
     "often",
     "sometimes",
     "likely",
+    "perhaps",
+    "generally",
+    "usually",
+    "typically",
+    "approximately",
+    "suggest",
+    "suggests",
+    "indicate",
+    "indicates",
+    "appears",
+    "seems",
 }
 
 

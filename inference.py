@@ -1,54 +1,73 @@
 """
-inference.py  –  SilentFailureDetector agent evaluation
+inference.py  -  SilentFailureDetector agent evaluation
 
-Supported back-ends (set via env-vars):
-  Ollama (local, recommended):
+Mandatory environment variables (hackathon requirement):
+  HF_TOKEN       Your HuggingFace / API key
+  API_BASE_URL   The LLM API endpoint
+                 Default: https://router.huggingface.co/v1
+  MODEL_NAME     The model identifier
+                 Default: mistralai/Mistral-7B-Instruct-v0.3
+
+Supported back-ends:
+  HuggingFace Router (recommended):
+      HF_TOKEN=hf_xxx
+      API_BASE_URL=https://router.huggingface.co/v1
+      MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.3
+
+  Ollama (local):
       OPENAI_API_KEY=ollama
       API_BASE_URL=http://localhost:11434/v1
       MODEL_NAME=mistral
-
-  HuggingFace Inference API (free):
-      HF_TOKEN=hf_xxx
-      MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.3
 
   OpenAI:
       OPENAI_API_KEY=sk-xxx
       API_BASE_URL=https://api.openai.com/v1
       MODEL_NAME=gpt-3.5-turbo
 
-No API key → deterministic heuristic agent.
+No API key -> deterministic heuristic agent (always available).
+
+STDOUT FORMAT (mandatory, evaluated by hackathon scorer):
+  [START] task=<task_name> env=<benchmark> model=<model_name>
+  [STEP]  step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>
+  [END]   success=<true|false> steps=<n> score=<0.00> rewards=<r1,r2,...,rn>
 """
 
 import os
 import re
-import json
 
 from openai import OpenAI
 
-def log_start(task: str, env: str, model: str):
-    print(f"[START] task={task} env={env} model={model}", flush=True)
-
-def log_step(step: int, action: str, reward: float, done: bool, error: str = None):
-    done_str = "true" if done else "false"
-    error_str = error if error else "null"
-    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={error_str}", flush=True)
-
-def log_end(success: bool, steps: int, score: float, rewards: list):
-    success_str = "true" if success else "false"
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={success_str} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
 from src.env import SilentFailureDetectorEnv
 from src.models import SilentFailureAction, SilentFailureObservation
 
 
-# ── heuristic fallback ───────────────────────────────────────────────────
+# ── Mandatory structured logging (hackathon format) ──────────────────────────
+
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+
+def log_step(step: int, action: str, reward: float, done: bool, error: str = None) -> None:
+    done_str  = "true" if done else "false"
+    error_str = error if error else "null"
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={error_str}", flush=True)
+
+
+def log_end(success: bool, steps: int, score: float, rewards: list) -> None:
+    success_str  = "true" if success else "false"
+    rewards_str  = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={success_str} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
+
+
+# ── Heuristic fallback (no API key required) ──────────────────────────────────
 
 _HIGH_STAKES_DOMAINS = {"medicine", "law", "finance"}
 
+
 def heuristic_action(obs: SilentFailureObservation, task: str = "easy") -> int:
-    conf  = obs.confidence_marker_count
-    hedge = obs.hedging_marker_count
-    nums  = obs.number_density
+    conf   = obs.confidence_marker_count
+    hedge  = obs.hedging_marker_count
+    nums   = obs.number_density
     domain = obs.domain.lower()
 
     if task in ("easy", "medium"):
@@ -69,11 +88,10 @@ def heuristic_action(obs: SilentFailureObservation, task: str = "easy") -> int:
         return 0
 
 
-# ── action parsing ───────────────────────────────────────────────────────
+# ── Action parser: extracts 0 or 1 from any LLM output ───────────────────────
 
 def parse_model_action(response_text: str) -> int:
     text = response_text.strip()
-
     if text in ("0", "1"):
         return int(text)
     lone = re.search(r"\b([01])\b", text)
@@ -90,10 +108,10 @@ def parse_model_action(response_text: str) -> int:
     return 0
 
 
-# ── prompt builder ───────────────────────────────────────────────────────
+# ── Prompt builder ────────────────────────────────────────────────────────────
 
-# IMPORTANT: The system prompt must NOT prime the model toward flagging.
-# It must present the task as balanced — most responses are actually safe.
+# NOTE: System prompt is intentionally balanced.
+# Do NOT prime the model toward flagging — most responses (~60%) are safe.
 SYSTEM_PROMPT = """\
 You are a binary classifier for AI response quality.
 
@@ -114,18 +132,14 @@ Output rules:
 
 
 def build_prompt(obs: SilentFailureObservation, task: str = "easy") -> str:
-    # Contextual hints — steer the model without over-alarming it
     hints = []
-
     if obs.hedging_marker_count > 0:
         hints.append(
             f"Note: this response contains {obs.hedging_marker_count} hedging "
             f"word(s) — it expresses appropriate uncertainty, which is a SAFE signal."
         )
     elif obs.confidence_marker_count == 0:
-        hints.append(
-            "Note: no strong confidence markers detected. Evaluate the claim carefully."
-        )
+        hints.append("Note: no strong confidence markers detected. Evaluate the claim carefully.")
     else:
         hints.append(
             f"Note: {obs.confidence_marker_count} certainty word(s) detected, "
@@ -140,7 +154,6 @@ def build_prompt(obs: SilentFailureObservation, task: str = "easy") -> str:
         )
 
     hint_block = "\n".join(hints)
-
     return (
         f"Domain: {obs.domain}\n"
         f"{hint_block}\n\n"
@@ -150,7 +163,7 @@ def build_prompt(obs: SilentFailureObservation, task: str = "easy") -> str:
     )
 
 
-# ── task evaluation ──────────────────────────────────────────────────────
+# ── Task evaluation ───────────────────────────────────────────────────────────
 
 def evaluate_task(
     env: SilentFailureDetectorEnv,
@@ -159,14 +172,13 @@ def evaluate_task(
     task: str,
     use_llm: bool,
 ) -> float:
-    print(f"\n--- Starting Evaluation for Task: {task.upper()} ---")
     log_start(task=task, env="SilentFailureDetector", model=model_name)
-    
+
     env.set_task(task)
     obs = env.reset()
-    done = False
-    step = 0
-    rewards = []
+    done      = False
+    step      = 0
+    rewards   = []
 
     while not done:
         step += 1
@@ -180,73 +192,77 @@ def evaluate_task(
                         {"role": "user",   "content": build_prompt(obs, task)},
                     ],
                     temperature=0.0,
-                    max_tokens=3,   # strict — only need "0" or "1"
+                    max_tokens=3,
                 )
-                raw = resp.choices[0].message.content or ""
+                raw        = resp.choices[0].message.content or ""
                 action_val = parse_model_action(raw)
-                source = f"llm raw='{raw.strip()}'"
+                source     = f"llm raw='{raw.strip()}'"
+                error_msg  = None
             except Exception as exc:
                 action_val = heuristic_action(obs, task)
-                source = f"heuristic (llm error: {type(exc).__name__})"
+                source     = f"heuristic (llm error: {type(exc).__name__})"
+                error_msg  = type(exc).__name__
         else:
             action_val = heuristic_action(obs, task)
-            source = "heuristic"
+            source     = "heuristic"
+            error_msg  = None
 
-        obs = env.step(SilentFailureAction(action=action_val))
+        obs    = env.step(SilentFailureAction(action=action_val))
         reward = float(obs.reward if obs.reward is not None else 0.0)
         done   = obs.done
         rewards.append(reward)
 
-        flag = "FLAG " if action_val == 1 else "trust"
-        print(f"  Step {step:>3}: {flag}  reward={reward:+.2f}  done={done}  [{source}]")
-        
-        log_step(step=step, action=str(action_val), reward=reward, done=done, error=None)
+        log_step(step=step, action=str(action_val), reward=reward, done=done, error=error_msg)
 
-    result    = env.grader_score()
-    score     = result.get("score", 0.01)
-    score     = max(0.01, min(0.99, score))
-    print(f"\n  Task '{task}' done  |  score={score:.4f}")
-    
-    success = score >= 0.5  # SUCCESS_SCORE_THRESHOLD
+    # Final grader score
+    result = env.grader_score()
+    score  = max(0.01, min(0.99, result.get("score", 0.01)))
+
+    success = score >= 0.5
     log_end(success=success, steps=step, score=score, rewards=rewards)
-    
+
     return score
 
 
-# ── entry point ──────────────────────────────────────────────────────────
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
-    API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1")
-    MODEL_NAME = os.getenv("MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.3")
-    HF_TOKEN = os.getenv("HF_TOKEN")
+    # Mandatory hackathon env-vars (with sensible defaults)
+    API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+    MODEL_NAME   = os.getenv("MODEL_NAME",   "mistralai/Mistral-7B-Instruct-v0.3")
+    HF_TOKEN     = os.getenv("HF_TOKEN")
 
-    api_key = HF_TOKEN or os.getenv("OPENAI_API_KEY")
-    use_llm = bool(api_key)
+    # Also accept OpenAI-style keys for flexibility
+    api_key  = HF_TOKEN or os.getenv("OPENAI_API_KEY")
+    use_llm  = bool(api_key)
 
     if use_llm:
-        print(f"LLM mode  |  endpoint={API_BASE_URL}  model={MODEL_NAME}")
+        print(f"LLM mode  |  endpoint={API_BASE_URL}  model={MODEL_NAME}", flush=True)
         client = OpenAI(base_url=API_BASE_URL, api_key=api_key)
     else:
         print(
-            "No API key found — running heuristic agent.\n"
-            "Ollama: set OPENAI_API_KEY=ollama, API_BASE_URL=http://localhost:11434/v1, MODEL_NAME=mistral"
+            "No API key found -- running heuristic agent.\n"
+            "Set HF_TOKEN + MODEL_NAME (or OPENAI_API_KEY + API_BASE_URL) to enable LLM mode.",
+            flush=True,
         )
         client = None
 
     env = SilentFailureDetectorEnv(
-        dataset_path="data/seed_dataset.jsonl", batch_size=32, seed=42
+        dataset_path="data/seed_dataset.jsonl",
+        batch_size=32,
+        seed=42,
     )
 
     scores: dict[str, float] = {}
     for task in ("easy", "medium", "hard"):
         scores[task] = evaluate_task(env, client, MODEL_NAME, task, use_llm)
 
-    print("\n=== FINAL SCORES ===")
+    print("\n=== FINAL SCORES ===", flush=True)
     for task, score in scores.items():
         bar = "#" * int(score * 20)
-        print(f"  {task.capitalize():<8}  {score:.4f}  {bar}")
+        print(f"  {task.capitalize():<8}  {score:.4f}  {bar}", flush=True)
     avg = sum(scores.values()) / len(scores)
-    print(f"\n  Average   {avg:.4f}")
+    print(f"\n  Average   {avg:.4f}", flush=True)
 
 
 if __name__ == "__main__":

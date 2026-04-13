@@ -10,6 +10,9 @@ api:
   tasks: /tasks
   baseline: /baseline
   grader: /grader
+  info: /info
+  runtime_config: /runtime-config
+  ui: /ui
 action_schema:
   type: object
   properties:
