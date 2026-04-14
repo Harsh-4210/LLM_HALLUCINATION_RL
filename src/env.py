@@ -18,7 +18,9 @@ class SilentFailureDetectorEnv(
 ):
     """OpenEnv environment for detecting confident-but-wrong AI outputs."""
 
-    SUPPORTS_CONCURRENT_SESSIONS = True
+    # Keep state in a single environment instance so /reset -> /step works
+    # predictably for the local dashboard and manual API testing.
+    SUPPORTS_CONCURRENT_SESSIONS = False
 
     def __init__(
         self,

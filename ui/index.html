@@ -768,8 +768,9 @@
         });
         if (!resetResp.ok) throw new Error(`Reset failed (${resetResp.status})`);
 
-        let obs = await resetResp.json();
-        let done = Boolean(obs.done);
+        const resetData = await resetResp.json();
+        let obs = resetData.observation || {};
+        let done = Boolean(resetData.done);
 
         logStep(`[START] task=${task} strategy=${strategy}`);
 
@@ -778,14 +779,15 @@
           const stepResp = await fetch(`${BASE}/step`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action }),
+            body: JSON.stringify({ action: { action } }),
           });
           if (!stepResp.ok) throw new Error(`Step failed (${stepResp.status})`);
 
-          obs = await stepResp.json();
-          done = Boolean(obs.done);
+          const stepData = await stepResp.json();
+          obs = stepData.observation || {};
+          done = Boolean(stepData.done);
 
-          const reward = Number(obs.reward || 0);
+          const reward = Number(stepData.reward || 0);
           state.episodeSteps += 1;
           state.episodeRewardTotal += reward;
           state.episodeRewards.push(reward);
