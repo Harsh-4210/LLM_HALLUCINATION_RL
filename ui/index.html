@@ -761,7 +761,7 @@
       buildEpisodeChart();
 
       try {
-        const resetResp = await fetch(`${BASE}/reset`, {
+        const resetResp = await fetch(`${BASE}/ui/reset`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ task_name: task }),
@@ -776,10 +776,10 @@
 
         while (!done) {
           const action = chooseAction(obs, strategy);
-          const stepResp = await fetch(`${BASE}/step`, {
+          const stepResp = await fetch(`${BASE}/ui/step`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: { action } }),
+            body: JSON.stringify({ action }),
           });
           if (!stepResp.ok) throw new Error(`Step failed (${stepResp.status})`);
 

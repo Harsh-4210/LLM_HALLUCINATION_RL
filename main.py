@@ -2,10 +2,12 @@
 
 import os
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse
 from openenv.core.env_server import create_fastapi_app
+from pydantic import BaseModel, Field
 
 from src.agents.rule_based_agent import RuleBasedAgent
 from src.env import SilentFailureDetectorEnv
@@ -32,6 +34,15 @@ app.version = "0.1.0"
 # Keep a shared instance for the custom hackathon endpoints
 _shared_env = _env_factory()
 _agent = RuleBasedAgent()
+
+
+class UIRresetRequest(BaseModel):
+    task_name: Optional[str] = Field(default=None)
+    seed: Optional[int] = Field(default=None)
+
+
+class UIStepRequest(BaseModel):
+    action: int = Field(ge=0, le=1)
 
 
 # ── Hackathon-required custom endpoints ─────────────────────────────────
@@ -101,6 +112,30 @@ def health() -> dict:
 @app.get("/tasks")
 def tasks() -> dict:
     return {"tasks": _shared_env.tasks()}
+
+
+@app.post("/ui/reset")
+def ui_reset(request: UIRresetRequest) -> dict:
+    """Reset shared env for the HTML dashboard flow."""
+    if request.task_name:
+        _shared_env.set_task(request.task_name)
+    observation = _shared_env.reset(seed=request.seed)
+    return {
+        "observation": observation.model_dump(),
+        "reward": observation.reward,
+        "done": observation.done,
+    }
+
+
+@app.post("/ui/step")
+def ui_step(request: UIStepRequest) -> dict:
+    """Execute one action against shared env for the HTML dashboard flow."""
+    observation = _shared_env.step(SilentFailureAction(action=request.action))
+    return {
+        "observation": observation.model_dump(),
+        "reward": observation.reward,
+        "done": observation.done,
+    }
 
 
 @app.post("/baseline")
